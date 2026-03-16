@@ -1,7 +1,7 @@
 {
   "name": "chatgpt-notion-copy",
   "version": "1.0.0",
-  "description": "Chrome extension to copy AI-generated responses (text + LaTeX) in a Notion-friendly format.",
+  "description": "Chrome extension to copy AI-generated answers with LaTeX math into Notion without breaking formulas or formatting.",
   "main": "extension/content.js",
   "keywords": [],
   "author": "",
