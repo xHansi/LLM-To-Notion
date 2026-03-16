@@ -103,13 +103,13 @@ function applyGenericMathNormalization(text: string): string {
  */
 function looksLikeUnicodeMathBlock(text: string): boolean {
   // Characters that are typical for Unicode math output (Greek, operators, integrals, partials, etc.)
-  const unicodeMathPattern = /[∂∫∞≈≠≤≥√±→⋅·╱∑∏ΔΛΩμνπφθλσρΓΨΦ]/;
+  const unicodeMathPattern = /[∂∫∞≈≠≤≥√±→⋅·╱∑∏ΔΛΩμνπφθλσρΓΨΦδ⊙]/;
   // If there are too few such characters, we do not treat it as a dedicated math block.
   let hits = 0;
   for (const ch of text) {
     if (unicodeMathPattern.test(ch)) {
       hits++;
-      if (hits >= 3) return true;
+      if (hits >= 2) return true;
     }
   }
   return false;
@@ -313,19 +313,88 @@ function normalizeUnicodeMathToLatex(text: string): string {
 }
 
 /**
- * Gemini-specific extraction:
- * - Only block formulas ( $$...$$ pairs, \(...\), \[...\] )
- * - No inline $...$ conversion so that text with $a$, $b$, $c$ etc. stays intact.
+ * Shared helper: given arbitrary raw text, try to find the "most math-like"
+ * block using Unicode/ASCII heuristics and turn it into a single $<...>$.
+ * Used by both the generic extractor (as a fallback) and the Gemini strategy.
  */
+function extractMathLikeBlockFromRawText(rawText: string): string {
+  // 1) DeepSeek-style: split text into paragraphs and look for the "most mathy" block.
+  const paragraphs = rawText.split(/\n\s*\n+/);
+  let text = rawText;
+  for (const para of paragraphs) {
+    const candidate = para.trim();
+    if (!candidate) continue;
+    if (looksLikeUnicodeMathBlock(candidate) || looksLikeAsciiMathBlock(candidate)) {
+      text = candidate;
+      break;
+    }
+  }
+
+  // 2) If that is not enough: collect lines from bottom to top until it looks like math.
+  if (!looksLikeUnicodeMathBlock(text) && !looksLikeAsciiMathBlock(text)) {
+    const lines = rawText
+      .split(/\n+/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    let acc: string[] = [];
+    for (let i = lines.length - 1; i >= 0; i--) {
+      acc.unshift(lines[i]);
+      const candidate = acc.join(" ");
+      if (looksLikeUnicodeMathBlock(candidate) || looksLikeAsciiMathBlock(candidate)) {
+        text = candidate;
+        break;
+      }
+    }
+  }
+
+  // 3) If the final text still does not look like math, abort.
+  if (!looksLikeUnicodeMathBlock(text) && !looksLikeAsciiMathBlock(text)) {
+    return "";
+  }
+
+  // 4) Apply Unicode→LaTeX mapping; if nothing triggers, at least normalize whitespace.
+  let latex = normalizeUnicodeMathToLatex(text).trim();
+  if (!latex) {
+    latex = text.replace(/\s+/g, " ").trim();
+  }
+
+  if (!latex) return "";
+  return `$<${latex}>$`;
+}
+
+/**
+ * Simple heading normalization for Gemini clipboard text:
+ * - If a line starts with Markdown-style heading markers ("# ", "## ", etc.),
+ *   ensure that whatever follows appears on a separate paragraph.
+ *   This avoids Notion treating the entire line as a single bold heading.
+ */
+function normalizeGeminiHeadings(text: string): string {
+  return text.replace(/^(#{1,6}\s+)([^\n]+)$/gm, (_m, hashes, rest) => {
+    const parts = rest.split(/\s+/);
+    if (parts.length <= 1) {
+      return `${hashes}${rest}`;
+    }
+    const first = parts[0];
+    const tail = parts.slice(1).join(" ");
+    return `${hashes}${first}\n\n${tail}`;
+  });
+}
+
 export function extractMathFromGeminiSelection(selection: Selection | null): string {
   if (!selection || selection.rangeCount === 0) return "";
   const text = selection.toString();
   if (!text.trim()) return "";
 
-  const out = applyBlockOnlyMathNormalization(text);
+  // 1) Try full LaTeX-based normalization (blocks + inline) similar to the generic path.
+  const direct = applyGenericMathNormalization(text);
+  if (direct !== text) {
+    return direct.trim();
+  }
 
-  if (out === text) return "";
-  return out.trim();
+  // 2) If that did not change anything, fall back to a conservative
+  // Unicode/ASCII math heuristic on the raw text.
+  return extractMathLikeBlockFromRawText(text).trim();
 }
 
 /**
@@ -368,11 +437,19 @@ export function extractMath(provider: ProviderId, selection: Selection | null): 
 
 /**
  * Used by the Gemini-specific clipboard normalization to turn system clipboard
- * text into the $<...>$ format with the same block-logic as above (no inline $...$).
+ * text into the $<...>$ format. For Gemini we now reuse the full LaTeX-based
+ * normalization (blocks + inline) so that both $$...$$ and $...$ are preserved.
  */
 export function normalizeGeminiClipboardText(raw: string): string {
   if (!raw) return "";
-  const out = applyBlockOnlyMathNormalization(raw);
+  // First, ensure $$...$$ blocks are visually separated from surrounding text
+  // before we normalize them to $<...>$.
+  const withSeparatedBlocks = raw.replace(/\s*\$\$([\s\S]*?)\$\$\s*/g, (_m, inner) => {
+    return `\n\n$$${inner}$$\n\n`;
+  });
+
+  let out = applyGenericMathNormalization(withSeparatedBlocks);
+  out = normalizeGeminiHeadings(out);
   return out.trim();
 }
 
@@ -393,48 +470,7 @@ export function extractMathFromSelectionGeneric(selection: Selection | null): st
     return direct.trim();
   }
 
-  // 2) DeepSeek-style: split text into paragraphs and look for the "most mathy" block.
-  const paragraphs = rawText.split(/\n\s*\n+/);
-  let text = rawText;
-  for (const para of paragraphs) {
-    const candidate = para.trim();
-    if (!candidate) continue;
-    if (looksLikeUnicodeMathBlock(candidate) || looksLikeAsciiMathBlock(candidate)) {
-      text = candidate;
-      break;
-    }
-  }
-
-  // 3) If that is not enough: collect lines from bottom to top until it looks like math.
-  if (!looksLikeUnicodeMathBlock(text) && !looksLikeAsciiMathBlock(text)) {
-    const lines = rawText
-      .split(/\n+/)
-      .map((l) => l.trim())
-      .filter(Boolean);
-
-    let acc: string[] = [];
-    for (let i = lines.length - 1; i >= 0; i--) {
-      acc.unshift(lines[i]);
-      const candidate = acc.join(" ");
-      if (looksLikeUnicodeMathBlock(candidate) || looksLikeAsciiMathBlock(candidate)) {
-        text = candidate;
-        break;
-      }
-    }
-  }
-
-  // 4) If the final text still does not look like math, abort.
-  if (!looksLikeUnicodeMathBlock(text) && !looksLikeAsciiMathBlock(text)) {
-    return "";
-  }
-
-  // 5) Apply Unicode→LaTeX mapping; if nothing triggers, at least normalize whitespace.
-  let latex = normalizeUnicodeMathToLatex(text).trim();
-  if (!latex) {
-    latex = text.replace(/\s+/g, " ").trim();
-  }
-
-  if (!latex) return "";
-  return `$<${latex}>$`;
+  // 2) Fallback: DeepSeek-style Unicode/ASCII math block detection.
+  return extractMathLikeBlockFromRawText(rawText);
 }
 

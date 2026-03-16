@@ -36,10 +36,10 @@ describe("mathExtraction", () => {
     (getNotionFormatFromSelection as jest.Mock).mockClear();
   });
 
-  describe("normalizeGeminiClipboardText / block-only normalization", () => {
+  describe("normalizeGeminiClipboardText / LaTeX normalization", () => {
     it("wraps $$...$$ blocks", () => {
       const out = normalizeGeminiClipboardText("Text $$x^2$$ more");
-      expect(out).toBe("Text $<x^2>$ more");
+      expect(out).toBe("Text\n\n$<x^2>$\n\nmore");
     });
 
     it("normalizes \\( ... \\) and \\[ ... \\]", () => {
@@ -47,10 +47,49 @@ describe("mathExtraction", () => {
       expect(out).toBe("$<x^2>$ and $<y^2>$");
     });
 
-    it("returns empty when nothing changes", () => {
+    it("normalizes inline $...$ segments", () => {
+      const out = normalizeGeminiClipboardText("Here is $x^2$ and $y^2$");
+      expect(out).toBe("Here is $<x^2>$ and $<y^2>$");
+    });
+
+    it("separates markdown headings from following text", () => {
+      const out = normalizeGeminiClipboardText("# Heading text continues on same line");
+      expect(out).toBe("# Heading\n\ntext continues on same line");
+    });
+
+    it("puts $<...>$ math blocks onto their own lines", () => {
+      const out = normalizeGeminiClipboardText(
+        "Before text $$x^2 + y^2 = 1$$ after text"
+      );
+      expect(out).toBe("Before text\n\n$<x^2 + y^2 = 1>$\n\nafter text");
+    });
+
+    it("returns empty from selection when nothing changes", () => {
       const sel = createSelectionFromText("No math here");
       const result = extractMathFromGeminiSelection(sel);
       expect(result).toBe("");
+    });
+  });
+
+  describe("Gemini extraction with heuristics", () => {
+    it("uses Unicode heuristics for backprop-style equations", () => {
+      const sel = createSelectionFromText(
+        "To understand backpropagation, think of it as a way for a neural network to look at its mistakes and figure out which weights to change.\n\nδ^L = ∇_a C ⊙ σ'(z^L)"
+      );
+      const out = extractMath("gemini", sel);
+      expect(out.startsWith("$<")).toBe(true);
+      expect(out.endsWith(">$")).toBe(true);
+      expect(out).toContain("\\delta");
+      expect(out).toContain("\\nabla");
+      expect(out).toContain("\\sigma");
+    });
+
+    it("keeps normal Gemini prose without math as empty extraction", () => {
+      const sel = createSelectionFromText(
+        "The value = sign is used in many sentences with longerwords."
+      );
+      const out = extractMath("gemini", sel);
+      expect(out).toBe("");
     });
   });
 

@@ -224,7 +224,9 @@ At a high level:
 
 Key pieces live in `src/core/mathExtraction.ts`:
 
-- `extractMathFromGeminiSelection` – block-only normalization for Gemini.
+- `extractMathFromGeminiSelection` – block-focused normalization for Gemini:
+  - Normalizes `$$...$$`, `\(...\)`, and `\[...\]` into `$<…>$`.
+  - If no explicit LaTeX delimiters are present, uses Unicode / ASCII math heuristics to detect math-heavy blocks (for example, backprop-style equations with `δ`, `∇`, `σ`, etc.) and wraps them in a single `$<…>$` expression.
 - `extractMathFromChatGpt` – uses `getNotionFormatFromSelection` (DOM-based).
 - `extractMathFromSelectionGeneric` – generic path:
   - Normalizes LaTeX delimiters.
