@@ -29,21 +29,6 @@ jobs:
 
       - name: Run tests
         run: npm test
-
-      - name: Require version bump on main (manifest.json)
-        if: github.ref == 'refs/heads/main'
-        run: |
-          if [ "$(git rev-parse --verify HEAD^ 2>/dev/null || echo '')" = "" ]; then
-            echo "No previous commit on main; skipping version bump check."
-            exit 0
-          fi
-
-          if git diff --quiet HEAD^ HEAD -- extension/manifest.json; then
-            echo "extension/manifest.json was not changed in this commit."
-            echo "Please bump the version in extension/manifest.json before committing to main."
-            exit 1
-          fi
-
       - name: Create ZIP for Chrome Web Store (main only)
         if: github.ref == 'refs/heads/main'
         run: |

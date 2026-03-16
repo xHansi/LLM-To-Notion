@@ -21,26 +21,24 @@ function bumpVersionString(version) {
 }
 
 function main() {
-  const rootDir = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+  const rootDir = path.resolve(
+    path.dirname(new URL(import.meta.url).pathname),
+    ".."
+  );
 
   const manifestPath = path.join(rootDir, "extension", "manifest.json");
-  const pkgPath = path.join(rootDir, "package.json");
 
   const manifest = readJson(manifestPath);
-  const pkg = readJson(pkgPath);
 
-  const currentVersion = manifest.version || pkg.version || "0.0.0";
+  const currentVersion = manifest.version || "0.0.0";
   const nextVersion = bumpVersionString(currentVersion);
 
   manifest.version = nextVersion;
-  pkg.version = nextVersion;
 
   writeJson(manifestPath, manifest);
-  writeJson(pkgPath, pkg);
 
   // eslint-disable-next-line no-console
-  console.log(`Bumped version to ${nextVersion}`);
+  console.log(`Version bump: ${currentVersion} -> ${nextVersion}`);
 }
 
 main();
-

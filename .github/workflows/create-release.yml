@@ -1,0 +1,102 @@
+name: Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump type"
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Read old version
+        id: read_old_version
+        run: |
+          OLD_VERSION=$(node -e "console.log(require('./extension/manifest.json').version || '0.0.0')")
+          echo "old_version=$OLD_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Bump version
+        run: npm run bump-version
+
+      - name: Read new version
+        id: read_new_version
+        run: |
+          NEW_VERSION=$(node -e "console.log(require('./extension/manifest.json').version || '0.0.0')")
+          echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Commit version bump
+        env:
+          NEW_VERSION: ${{ steps.read_new_version.outputs.new_version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add extension/manifest.json
+          git commit -m "chore: bump version to ${NEW_VERSION}"
+
+      - name: Create tag
+        env:
+          NEW_VERSION: ${{ steps.read_new_version.outputs.new_version }}
+        run: |
+          git tag "v${NEW_VERSION}"
+
+      - name: Push commit and tag
+        env:
+          NEW_VERSION: ${{ steps.read_new_version.outputs.new_version }}
+        run: |
+          git push origin main
+          git push origin "v${NEW_VERSION}"
+
+      - name: Build extension
+        run: npm run build-prod
+
+      - name: Create ZIP
+        id: create_zip
+        env:
+          NEW_VERSION: ${{ steps.read_new_version.outputs.new_version }}
+        run: |
+          ZIP_NAME="llm-to-notion-${NEW_VERSION}.zip"
+          rm -f "$ZIP_NAME"
+          cd extension
+          zip -r "../$ZIP_NAME" .
+          echo "zip_name=$ZIP_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.create_zip.outputs.zip_name }}
+          path: ${{ steps.create_zip.outputs.zip_name }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.read_new_version.outputs.new_version }}
+          name: v${{ steps.read_new_version.outputs.new_version }}
+          body: Automated release for version v${{ steps.read_new_version.outputs.new_version }}
+          files: ${{ steps.create_zip.outputs.zip_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
