@@ -30,16 +30,33 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Require version bump on main (manifest.json)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          if [ "$(git rev-parse --verify HEAD^ 2>/dev/null || echo '')" = "" ]; then
+            echo "No previous commit on main; skipping version bump check."
+            exit 0
+          fi
+
+          if git diff --quiet HEAD^ HEAD -- extension/manifest.json; then
+            echo "extension/manifest.json was not changed in this commit."
+            echo "Please bump the version in extension/manifest.json before committing to main."
+            exit 1
+          fi
+
       - name: Create ZIP for Chrome Web Store (main only)
         if: github.ref == 'refs/heads/main'
         run: |
-          rm -f extension.zip
-          zip -r extension.zip extension
+          VERSION=$(node -e "console.log(require('./extension/manifest.json').version)")
+          echo "Packaging version ${VERSION}"
+          rm -f "llm-to-notion-${VERSION}.zip"
+          cd extension
+          zip -r "../llm-to-notion-${VERSION}.zip" .
 
       - name: Upload ZIP artifact (main only)
         if: github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
-          name: extension-zip
-          path: extension.zip
+          name: llm-to-notion-zip
+          path: llm-to-notion-*.zip
 
