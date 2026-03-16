@@ -81,7 +81,7 @@ jobs:
           ZIP_NAME="llm-to-notion-${NEW_VERSION}.zip"
           rm -f "$ZIP_NAME"
           cd extension
-          zip -r "../$ZIP_NAME" .
+          zip -r "../$ZIP_NAME" ./*
           echo "zip_name=$ZIP_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Upload ZIP artifact

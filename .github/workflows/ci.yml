@@ -36,7 +36,7 @@ jobs:
           echo "Packaging version ${VERSION}"
           rm -f "llm-to-notion-${VERSION}.zip"
           cd extension
-          zip -r "../llm-to-notion-${VERSION}.zip" .
+          zip -r "../llm-to-notion-${VERSION}.zip" ./*
 
       - name: Upload ZIP artifact (main only)
         if: github.ref == 'refs/heads/main'
