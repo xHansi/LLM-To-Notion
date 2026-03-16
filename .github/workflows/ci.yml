@@ -30,9 +30,16 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Upload built extension artifact
+      - name: Create ZIP for Chrome Web Store (main only)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          rm -f extension.zip
+          zip -r extension.zip extension
+
+      - name: Upload ZIP artifact (main only)
+        if: github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
-          name: extension-build
-          path: extension
+          name: extension-zip
+          path: extension.zip
 
