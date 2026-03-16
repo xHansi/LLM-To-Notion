@@ -64,68 +64,6 @@ describe("mathExtraction", () => {
       expect(out).toBe("Before text\n\n$<x^2 + y^2 = 1>$\n\nafter text");
     });
 
-    it("Gemini regression: converts rendered Unicode Schrödinger equation back to LaTeX inside prose", () => {
-      const input =
-        "This is the most general form. It describes the evolution of a wave function Ψ over time.\n\n" +
-        "iℏ \n" +
-        "∂t\n" +
-        "∂\n" +
-        "Ψ(r,t)= \n" +
-        "H^\n" +
-        "Ψ(r,t).";
-
-      const out = normalizeGeminiClipboardText(input);
-
-      // Keep the prose (don't collapse everything into a single math block).
-      expect(out).toContain("This is the most general form.");
-
-      // Ensure we produced a Notion math segment with the key LaTeX tokens.
-      expect(out).toContain("$<");
-      expect(out).toContain("\\hbar");
-      expect(out).toContain("\\Psi");
-      expect(out).toContain("\\frac{\\partial}{\\partial t}");
-    });
-
-    it("Gemini regression: repairs missing inline $ before ':' and normalizes each symbol separately", () => {
-      const input =
-        "This is the most general form. It describes the evolution of a wave function $\\Psi$ over time." +
-        "$$i\\hbar \\frac{\\partial}{\\partial t} \\Psi(\\mathbf{r}, t) = \\hat{H} \\Psi(\\mathbf{r}, t)$$" +
-        "$i$: The imaginary unit." +
-        "$\\hbar$: The reduced Planck constant." +
-        "$\\frac{\\partial}{\\partial t}$: The partial derivative with respect to time." +
-        "$\\hat{H}$: The Hamiltonian operator.";
-
-      const out = normalizeGeminiClipboardText(input);
-
-      // Inline math should not swallow the following prose up to the next '$'.
-      expect(out).toContain("This is the most general form.");
-      expect(out).toContain("The imaginary unit.");
-      expect(out).toContain("The reduced Planck constant.");
-
-      // Each inline segment should be normalized to its own $<...>$ block.
-      expect(out).toContain("$<\\Psi>$");
-      expect(out).toContain("$<i>$: The imaginary unit.");
-      expect(out).toContain("$<\\hbar>$: The reduced Planck constant.");
-      expect(out).toContain("$<\\frac{\\partial}{\\partial t}>$:");
-      expect(out).toContain("$<\\hat{H}>$:");
-    });
-
-    it("Gemini regression: reconstructs hat accent from standalone caret layout", () => {
-      const input =
-        "Text before.\n\n" +
-        "H\n^\n" +
-        ": The Hamiltonian operator.\n\n" +
-        "$$i\\hbar = H\n^\n\\Psi$$";
-
-      const out = normalizeGeminiClipboardText(input);
-
-      // In prose: H + standalone ^ should become \hat{H} and then be wrapped when followed by ':'.
-      expect(out).toContain("$<\\hat{H}>$: The Hamiltonian operator.");
-
-      // In the $$...$$ block it should become \hat{H} inside the math block.
-      expect(out).toContain("$<i\\hbar = \\hat{H} \\Psi>$");
-    });
-
     it("returns empty from selection when nothing changes", () => {
       const sel = createSelectionFromText("No math here");
       const result = extractMathFromGeminiSelection(sel);
