@@ -121,11 +121,10 @@ npm -v
 
 ### 🛒 Install from Chrome Web Store
 
-The extension is available here:
+Once published, the extension will be available in the Chrome Web Store.  
+Search for **“LLM to Notion – Math & LaTeX”** in the store, then:
 
-- `https://chrome.google.com/webstore/detail/chatgpt-equation-renderer/nkkkaendbndanjjndfpebmekhgdjlhkh?hl`
-
-1. Open the link in Chrome.
+1. Open the listing in Chrome.
 2. Click **“Add to Chrome”**.
 3. Pin the extension in your toolbar for quick access (optional but recommended).
 

@@ -345,11 +345,7 @@ const PopupApp: React.FC = () => {
         <button
           type="button"
           className="link-row"
-          onClick={() =>
-            openUrl(
-              "https://chrome.google.com/webstore/detail/chatgpt-equation-renderer/nkkkaendbndanjjndfpebmekhgdjlhkh?hl"
-            )
-          }
+          onClick={() => openUrl("https://chrome.google.com/webstore/detail/LLM-To-Notion-PLACEHOLDER-ID")}
         >
           <span className="icon">
             <FiHelpCircle />
