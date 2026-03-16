@@ -136,8 +136,8 @@ The extension is available here:
 Clone the project:
 
 ```bash
-git clone https://github.com/<your-username>/chatgpt-equations.git
-cd chatgpt-equations
+git clone https://github.com/xHansi/LLM-To-Notion.git
+cd LLM-To-Notion
 ```
 
 Install dependencies:
@@ -190,7 +190,7 @@ On Notion pages:
     - Remove the `$<` / `>$` wrappers in the plain text.
     - Step through equations sequentially until all have been converted.
 
-The exact key bindings and stepping behavior live in the content script logic for Notion (see the `src/index.js` and `src/content/notionContent.ts` code in this repo).
+The exact key bindings and stepping behavior live in the content script logic for Notion (see the `src/content/notionContent.ts` and `src/core/equations.ts` code in this repo).
 
 ---
 
@@ -311,50 +311,33 @@ What is covered:
 
 ---
 
-## 🚀 CI/CD & Publishing
+## 🚀 CI & Publishing
 
 ### Branch Workflows
 
-We use GitHub Actions, defined in `.github/workflows/ci.yml`:
+We use GitHub Actions, defined in `.github/workflows/ci.yml`, to make sure the extension keeps building and tests stay green:
 
-- **For all branches (`push` + `pull_request`)**:
-  - `build-and-test` job:
-    - `npm ci`
-    - `npm run build-prod`
-    - `npm test`
-    - Uploads the built `extension/` as an artifact.
+- On pushes and pull requests to `main`:
+  - Run `npm ci`
+  - Run `npm run build-prod`
+  - Run `npm test`
+  - Upload the built `extension/` as an artifact
 
-This ensures that every branch and PR is built and tested before merging.
+This gives you a ready‑to‑download build from each CI run.
 
-### Automatic Chrome Web Store Publishing
+### Publishing to the Chrome Web Store
 
-On **pushes to `main`**, after `build-and-test` succeeds:
+Publishing is **manual**, but the ZIP is prepared by CI:
 
-- `publish-chrome` job:
-  - Re-checkout and install dependencies.
-  - Build the extension (`npm run build-prod`).
-  - Run the version bump script:
-
-    ```bash
-    node scripts/bump-version.mjs
-    ```
-
-    This:
-    - Reads `extension/manifest.json` and `package.json`.
-    - Increments the patch version (e.g. `0.1.0` → `0.1.1`).
-    - Writes the new version back into both files.
-
-  - Zips the `extension` folder into `extension.zip`.
-  - Calls `chrome-webstore-upload-cli` to upload & auto-publish the new version.
-
-Required GitHub Action secrets (configured in repo settings):
-
-- `CHROME_EXTENSION_ID` – your extension ID.
-- `CHROME_CLIENT_ID` – OAuth client ID.
-- `CHROME_CLIENT_SECRET` – OAuth client secret.
-- `CHROME_REFRESH_TOKEN` – refresh token with publish rights.
-
-Contributors generally don’t need to worry about this; maintainers handle the secrets and release process.
+1. Push or merge changes into `main`.
+2. Wait for the GitHub Action on `main` to finish. It will:
+   - Install dependencies
+   - Run tests
+   - Build the extension and create a ZIP of the `extension/` folder
+   - Upload that ZIP as a build artifact
+3. Download the ZIP artifact from the GitHub Actions run.
+4. Go to the Chrome Web Store developer dashboard for this extension.
+5. Upload the downloaded ZIP and publish a new version.
 
 ---
 

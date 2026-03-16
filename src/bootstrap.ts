@@ -1,13 +1,10 @@
-// @ts-nocheck
-
 import { initNotionContent } from "./content/notionContent";
 import { initEquationAssistant } from "./content/equationAssistant";
 import { getProviderForHost, withDefaultProvider, seedDefaultDomains, hostMatchesDomain } from "./core/providers";
+import { EQUATION_ASSISTANT_DOMAINS_STORAGE_KEY } from "./core/storageKeys";
 
 const isNotionHost =
   location.host.includes("notion.so") || location.host.includes("notion.site");
-
-const STORAGE_KEY = "equationAssistantDomains";
 
 /**
  * Load domain configuration from chrome.storage.local, falling back to defaults
@@ -21,8 +18,8 @@ function loadDomainConfig() {
       resolve(DEFAULT_DOMAINS);
       return;
     }
-    chrome.storage.local.get(STORAGE_KEY, (data) => {
-      const rawList = data && data[STORAGE_KEY];
+    chrome.storage.local.get(EQUATION_ASSISTANT_DOMAINS_STORAGE_KEY, (data) => {
+      const rawList = data && data[EQUATION_ASSISTANT_DOMAINS_STORAGE_KEY];
       if (!rawList || !Array.isArray(rawList) || rawList.length === 0) {
         resolve(DEFAULT_DOMAINS);
         return;

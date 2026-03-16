@@ -4,10 +4,9 @@ import { FiGithub, FiCoffee, FiHelpCircle, FiTrash2, FiInfo } from "react-icons/
 import type { ProviderId, ProviderDomainConfig } from "../core/providers";
 import { getProviderForHost, withDefaultProvider, seedDefaultDomains } from "../core/providers";
 import { LANGUAGES, type SupportedLanguage, loadLanguage, saveLanguage, t } from "../core/i18n";
+import { EQUATION_ASSISTANT_DOMAINS_STORAGE_KEY } from "../core/storageKeys";
 
 type DomainConfig = Required<ProviderDomainConfig>;
-
-const STORAGE_KEY = "equationAssistantDomains";
 
 const DEFAULT_DOMAINS: DomainConfig[] = seedDefaultDomains().map((d) =>
   withDefaultProvider(d)
@@ -39,15 +38,20 @@ async function loadDomains(): Promise<DomainConfig[]> {
       resolve(cleaned);
       return;
     }
-    chrome.storage.local.get(STORAGE_KEY, (data) => {
-      const raw = (data && (data as any)[STORAGE_KEY]) as any[] | undefined;
+    chrome.storage.local.get(EQUATION_ASSISTANT_DOMAINS_STORAGE_KEY, (data) => {
+      const raw = (data && (data as any)[EQUATION_ASSISTANT_DOMAINS_STORAGE_KEY]) as
+        | any[]
+        | undefined;
       if (!raw || !Array.isArray(raw) || raw.length === 0) {
         const cleanedDefaults = DEFAULT_DOMAINS.filter(
           (d) => d.domain !== "perplexity.ai" && d.domain !== "www.perplexity.ai"
         );
-        chrome.storage.local.set({ [STORAGE_KEY]: cleanedDefaults }, () => {
+        chrome.storage.local.set(
+          { [EQUATION_ASSISTANT_DOMAINS_STORAGE_KEY]: cleanedDefaults },
+          () => {
           resolve([...cleanedDefaults]);
-        });
+          }
+        );
         return;
       }
       const filteredRaw = raw.filter(
@@ -63,9 +67,12 @@ async function loadDomains(): Promise<DomainConfig[]> {
           provider: (item.provider as ProviderId | undefined) || getProviderForHost(item.domain),
         })
       ) as DomainConfig[];
-      chrome.storage.local.set({ [STORAGE_KEY]: normalized }, () => {
+      chrome.storage.local.set(
+        { [EQUATION_ASSISTANT_DOMAINS_STORAGE_KEY]: normalized },
+        () => {
         resolve(normalized);
-      });
+        }
+      );
     });
   });
 }
@@ -76,7 +83,10 @@ async function saveDomains(list: DomainConfig[]): Promise<void> {
       resolve();
       return;
     }
-    chrome.storage.local.set({ [STORAGE_KEY]: list }, () => resolve());
+    chrome.storage.local.set(
+      { [EQUATION_ASSISTANT_DOMAINS_STORAGE_KEY]: list },
+      () => resolve()
+    );
   });
 }
 
@@ -335,7 +345,11 @@ const PopupApp: React.FC = () => {
         <button
           type="button"
           className="link-row"
-          onClick={() => openUrl("https://example.com/chrome-store")}
+          onClick={() =>
+            openUrl(
+              "https://chrome.google.com/webstore/detail/chatgpt-equation-renderer/nkkkaendbndanjjndfpebmekhgdjlhkh?hl"
+            )
+          }
         >
           <span className="icon">
             <FiHelpCircle />
