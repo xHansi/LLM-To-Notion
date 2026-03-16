@@ -325,7 +325,7 @@ const PopupApp: React.FC = () => {
         <button
           type="button"
           className="link-row"
-          onClick={() => openUrl("https://example.com/coffee")}
+          onClick={() => openUrl("https://buymeacoffee.com/xHansi")}
         >
           <span className="icon">
             <FiCoffee />
@@ -345,7 +345,7 @@ const PopupApp: React.FC = () => {
         <button
           type="button"
           className="link-row"
-          onClick={() => openUrl("https://example.com/github")}
+          onClick={() => openUrl("https://github.com/xHansi/LLM-To-Notion")}
         >
           <span className="icon">
             <FiGithub />
