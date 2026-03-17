@@ -80,26 +80,55 @@ class EquationAssistant {
 
       const sel = window.getSelection();
 
-      // Gemini: normalize the selected text directly (no clipboard readText).
-      // Reading from the system clipboard is permission/focus-sensitive on Gemini and can
-      // cause the feature to work only once until refresh.
-      if (this.provider === "gemini") {
-        const selectedText = (sel && !sel.isCollapsed) ? sel.toString() : "";
-        const normalized = normalizeGeminiClipboardText(selectedText);
-        const final = normalized || extractMath(this.provider, sel) || textToCopy || "";
-
-        if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-          chrome.storage.local.set({ notionCopyText: final });
+      // Gemini: first trigger a normal copy and then read the raw clipboard text,
+      // converting it into our $<...>$ format so we share the same source as Ctrl/Cmd+C.
+      if (
+        this.provider === "gemini" &&
+        typeof navigator !== "undefined" &&
+        (navigator as any).clipboard &&
+        (navigator as any).clipboard.readText
+      ) {
+        try {
+          document.execCommand("copy");
+        } catch {
+          // ignore; we will fall back to the generic path if needed
         }
 
-        copyTextToClipboard(final).then(() => {
-          btn.textContent = t("copySuccess", this.language);
-          btn.classList.add("gpt-eq-copy-for-notion-done");
-          setTimeout(() => {
-            if (btn.parentNode) btn.remove();
-            this.copyButton = null;
-          }, 1800);
-        });
+        (navigator as any).clipboard
+          .readText()
+          .then((raw: string) => {
+            const normalized = normalizeGeminiClipboardText(raw);
+            const final = normalized || textToCopy || "";
+
+            if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+              chrome.storage.local.set({ notionCopyText: final });
+            }
+
+            return copyTextToClipboard(final);
+          })
+          .then(() => {
+            btn.textContent = t("copySuccess", this.language);
+            btn.classList.add("gpt-eq-copy-for-notion-done");
+            setTimeout(() => {
+              if (btn.parentNode) btn.remove();
+              this.copyButton = null;
+            }, 1800);
+          })
+          .catch(() => {
+            // Fall back to the generic extraction path if anything goes wrong.
+            const fallbackFinal = extractMath(this.provider, sel) || textToCopy || "";
+            if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+              chrome.storage.local.set({ notionCopyText: fallbackFinal });
+            }
+            copyTextToClipboard(fallbackFinal).then(() => {
+              btn.textContent = t("copySuccess", this.language);
+              btn.classList.add("gpt-eq-copy-for-notion-done");
+              setTimeout(() => {
+                if (btn.parentNode) btn.remove();
+                this.copyButton = null;
+              }, 1800);
+            });
+          });
 
         return;
       }
