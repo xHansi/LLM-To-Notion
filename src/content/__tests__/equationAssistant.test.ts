@@ -48,6 +48,7 @@ describe("equationAssistant integration", () => {
 
   afterEach(() => {
     jest.clearAllTimers();
+    jest.clearAllMocks();
   });
 
   function selectAllText() {
@@ -93,6 +94,37 @@ describe("equationAssistant integration", () => {
 
     expect((global as any).chrome.storage.local.set).toHaveBeenCalled();
     expect(copyTextToClipboard).toHaveBeenCalled();
+  });
+
+  it("Gemini: can copy multiple times without refresh", async () => {
+    const { copyTextToClipboard } = await import("../../core/clipboard");
+
+    initEquationAssistant("gemini");
+    selectAllText();
+    document.dispatchEvent(new MouseEvent("mouseup"));
+    document.dispatchEvent(new Event("selectionchange"));
+    jest.runAllTimers();
+
+    let btn = document.querySelector("button.gpt-eq-copy-for-notion") as HTMLButtonElement | null;
+    expect(btn).not.toBeNull();
+    btn!.click();
+    await Promise.resolve();
+
+    // Let the "copied" state timeout remove the button
+    jest.advanceTimersByTime(2000);
+
+    // Select again and ensure the button re-appears and copy works again
+    selectAllText();
+    document.dispatchEvent(new MouseEvent("mouseup"));
+    document.dispatchEvent(new Event("selectionchange"));
+    jest.runAllTimers();
+
+    btn = document.querySelector("button.gpt-eq-copy-for-notion") as HTMLButtonElement | null;
+    expect(btn).not.toBeNull();
+    btn!.click();
+    await Promise.resolve();
+
+    expect(copyTextToClipboard).toHaveBeenCalledTimes(2);
   });
 });
 

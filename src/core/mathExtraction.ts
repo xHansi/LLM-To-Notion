@@ -313,6 +313,41 @@ function normalizeUnicodeMathToLatex(text: string): string {
 }
 
 /**
+ * Gemini sometimes copies rendered math with "stacked" layout using newlines
+ * (e.g. showing a fraction vertically). This helper collapses a few common
+ * patterns into LaTeX before we run Unicode→LaTeX symbol mapping.
+ */
+function normalizeGeminiUnicodeMathLayout(text: string): string {
+  let out = text;
+
+  // Common stacked partial derivative: either order can appear in copied text.
+  // Examples seen:
+  //   ∂t\n∂   or   ∂\n∂t   →  \frac{\partial}{\partial t}
+  out = out.replace(/∂\s*t\s*\n\s*∂/g, "\\frac{\\partial}{\\partial t}");
+  out = out.replace(/∂\s*\n\s*∂\s*t/g, "\\frac{\\partial}{\\partial t}");
+
+  // Gemini sometimes copies \hat{H} (and similar) as a base letter with a standalone
+  // caret on the next line, e.g.:
+  //   H\n^\n:   or   H ^ :   (not an exponent like x^2)
+  // Reconstruct it as \hat{H} only when the caret is a standalone token.
+  out = out.replace(
+    /([A-Za-z])\s*\n\s*\^\s*(?=\n|$|[ \t]|[:.,;)\]\}=\+\-*/])/g,
+    "\\hat{$1}"
+  );
+  out = out.replace(
+    /([A-Za-z])\s+\^\s*(?=$|[ \t]*[:.,;)\]\}=\+\-*/\n])/g,
+    "\\hat{$1}"
+  );
+
+  // Remove stray zero-width / soft hyphen characters that can appear in copy output.
+  out = out.replace(/[\u200B-\u200D\uFEFF\u00AD]/g, "");
+
+  // Collapse excessive whitespace/newlines; downstream heuristics rely on this.
+  out = out.replace(/[ \t]+\n/g, "\n").replace(/\n[ \t]+/g, "\n");
+  return out;
+}
+
+/**
  * Shared helper: given arbitrary raw text, try to find the "most math-like"
  * block using Unicode/ASCII heuristics and turn it into a single $<...>$.
  * Used by both the generic extractor (as a fallback) and the Gemini strategy.
@@ -364,6 +399,62 @@ function extractMathLikeBlockFromRawText(rawText: string): string {
 }
 
 /**
+ * Like extractMathLikeBlockFromRawText, but returns the detected block text as well
+ * so we can replace it inside a larger prose selection (Gemini copy behavior).
+ */
+function findMathLikeBlockInRawText(rawText: string): { block: string; latex: string } {
+  // NOTE: We must return a substring that exists in the *original* rawText so it can
+  // be replaced in-place without losing surrounding prose. We only use layout
+  // normalization for detection and for Unicode→LaTeX mapping.
+  const normalizedForDetection = normalizeGeminiUnicodeMathLayout(rawText);
+
+  // 1) Prefer dedicated paragraphs (from original text).
+  const paragraphs = rawText.split(/\n\s*\n+/);
+  let block = "";
+  for (const para of paragraphs) {
+    const candidate = para.trim();
+    if (!candidate) continue;
+    const normalizedCandidate = normalizeGeminiUnicodeMathLayout(candidate);
+    if (
+      looksLikeUnicodeMathBlock(normalizedCandidate) ||
+      looksLikeAsciiMathBlock(normalizedCandidate)
+    ) {
+      block = candidate;
+      break;
+    }
+  }
+
+  // 2) If no paragraph is dedicated math: accumulate a suffix of lines.
+  if (!block) {
+    const lines = rawText
+      .split(/\n+/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    let acc: string[] = [];
+    for (let i = lines.length - 1; i >= 0; i--) {
+      acc.unshift(lines[i]);
+      const candidateForDetection = normalizeGeminiUnicodeMathLayout(acc.join(" "));
+      if (
+        looksLikeUnicodeMathBlock(candidateForDetection) ||
+        looksLikeAsciiMathBlock(candidateForDetection)
+      ) {
+        block = acc.join("\n");
+        break;
+      }
+    }
+  }
+
+  if (!block) return { block: "", latex: "" };
+
+  // Turn the detected block into LaTeX.
+  // Use the fully normalized raw text for mapping (handles stacked layout).
+  const mapped = normalizeUnicodeMathToLatex(normalizeGeminiUnicodeMathLayout(block)).trim();
+  const latex = mapped ? mapped.replace(/\s+/g, " ").trim() : "";
+  return { block, latex };
+}
+
+/**
  * Simple heading normalization for Gemini clipboard text:
  * - If a line starts with Markdown-style heading markers ("# ", "## ", etc.),
  *   ensure that whatever follows appears on a separate paragraph.
@@ -379,6 +470,56 @@ function normalizeGeminiHeadings(text: string): string {
     const tail = parts.slice(1).join(" ");
     return `${hashes}${first}\n\n${tail}`;
   });
+}
+
+function splitByNotionMathBlocks(text: string): Array<{ kind: "text" | "math"; value: string }> {
+  // Matches $<...>$ blocks (non-greedy, may contain newlines).
+  const re = /\$<[\s\S]*?>\$/g;
+  const parts: Array<{ kind: "text" | "math"; value: string }> = [];
+
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    if (m.index > last) {
+      parts.push({ kind: "text", value: text.slice(last, m.index) });
+    }
+    parts.push({ kind: "math", value: m[0] });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) {
+    parts.push({ kind: "text", value: text.slice(last) });
+  }
+  return parts;
+}
+
+function normalizeUnicodeMathInProseSegments(text: string): string {
+  const parts = splitByNotionMathBlocks(text);
+  const outParts = parts.map((p) => {
+    if (p.kind === "math") return p.value;
+
+    // 1) Collapse stacked Unicode layout (e.g. ∂t\n∂) into LaTeX tokens.
+    let s = normalizeGeminiUnicodeMathLayout(p.value);
+
+    // 2) Wrap a few common single-symbol math tokens used in explanations.
+    // Only do this when they are followed by punctuation/whitespace typical for definitions.
+    s = s.replace(/ℏ(?=\s*[:.,;)\]])/g, "$<\\hbar>$");
+    s = s.replace(/Ψ(?=\s)/g, "$<\\Psi>$");
+
+    // If the layout normalizer produced a LaTeX fraction token, wrap it when followed by ":".
+    s = s.replace(
+      /\\frac\{\\partial\}\{\\partial t\}(?=\s*[:.,;)\]])/g,
+      "$<\\frac{\\partial}{\\partial t}>$"
+    );
+
+    // If the layout normalizer reconstructed a hat accent, wrap it when used as a definition token.
+    s = s.replace(/\\hat\{([A-Za-z])\}(?=\s*[:.,;)\]])/g, (_m, sym) => {
+      return `$<\\hat{${sym}}>$`;
+    });
+
+    return s;
+  });
+
+  return outParts.join("");
 }
 
 export function extractMathFromGeminiSelection(selection: Selection | null): string {
@@ -442,13 +583,56 @@ export function extractMath(provider: ProviderId, selection: Selection | null): 
  */
 export function normalizeGeminiClipboardText(raw: string): string {
   if (!raw) return "";
+
+  // Gemini sometimes drops the closing "$" before punctuation in inline math, e.g.:
+  // "$i$: ..." becomes "$i: ..." which would cause our normalizer to swallow the prose
+  // up to the next "$". Repair a few conservative cases (single symbol or LaTeX command).
+  const repairedInlineDelimiters = raw
+    // $i:  -> $i$:
+    .replace(/\$([A-Za-z])(?=\s*[:.,;)\]])/g, (_m, sym) => `$${sym}$`)
+    // $\hbar: -> $\hbar$:
+    .replace(/\$(\\[A-Za-z]+)(?=\s*[:.,;)\]])/g, (_m, cmd) => `$${cmd}$`)
+    // $\hat{H}: -> $\hat{H}$:
+    .replace(/\$(\\[A-Za-z]+\{[^}]*\})(?=\s*[:.,;)\]])/g, (_m, cmd) => `$${cmd}$`);
+
   // First, ensure $$...$$ blocks are visually separated from surrounding text
   // before we normalize them to $<...>$.
-  const withSeparatedBlocks = raw.replace(/\s*\$\$([\s\S]*?)\$\$\s*/g, (_m, inner) => {
-    return `\n\n$$${inner}$$\n\n`;
-  });
+  const withSeparatedBlocks = repairedInlineDelimiters.replace(
+    /\s*\$\$([\s\S]*?)\$\$\s*/g,
+    (_m, inner) => {
+      // Also normalize Gemini's "stacked" Unicode layout inside the block before wrapping.
+      const normalizedInner = normalizeGeminiUnicodeMathLayout(inner)
+        .replace(/\n+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      return `\n\n$$${normalizedInner}$$\n\n`;
+    }
+  );
 
   let out = applyGenericMathNormalization(withSeparatedBlocks);
+
+  // If no explicit LaTeX delimiter normalization happened, Gemini may have copied
+  // rendered math as Unicode with line breaks. In that case, try to detect a
+  // math-like block inside the text and replace only that block.
+  if (out === withSeparatedBlocks) {
+    const { block, latex } = findMathLikeBlockInRawText(withSeparatedBlocks);
+    if (block && latex) {
+      const idx = withSeparatedBlocks.lastIndexOf(block);
+      if (idx >= 0) {
+        out =
+          withSeparatedBlocks.slice(0, idx) +
+          `$<${latex}>$` +
+          withSeparatedBlocks.slice(idx + block.length);
+      } else {
+        out = `$<${latex}>$`;
+      }
+    }
+  }
+
+  // Additional pass: Gemini sometimes mixes already-normalized $<...>$ blocks with
+  // Unicode-math snippets (e.g. "ℏ:" or stacked "∂t/∂") in the surrounding prose.
+  out = normalizeUnicodeMathInProseSegments(out);
+
   out = normalizeGeminiHeadings(out);
   return out.trim();
 }
