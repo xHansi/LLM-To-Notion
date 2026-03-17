@@ -1,8 +1,9 @@
+/**
+ * Decodes HTML entities in LaTeX so the clipboard receives plain text (e.g. &amp; -> &).
+ */
 export function decodeLatexFromAnnotation(html: string | null | undefined): string {
   if (!html) return "";
   const div = document.createElement("div");
-  // `html` is expected to originate from KaTeX's `<annotation>` node inside `.katex-mathml`,
-  // not from arbitrary user input; we only use the resulting text content for clipboard output.
   div.innerHTML = html;
   return (div.textContent || div.innerText || "").trim();
 }

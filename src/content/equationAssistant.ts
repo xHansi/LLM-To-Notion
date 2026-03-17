@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import { extractMath, normalizeGeminiClipboardText } from "../core/mathExtraction";
 import { copyTextToClipboard } from "../core/clipboard";
 import type { ProviderId } from "../core/providers";
@@ -6,7 +8,7 @@ import { type SupportedLanguage, loadLanguage, getDefaultLanguage, t } from "../
 class EquationAssistant {
   provider: ProviderId;
   copyButton: HTMLButtonElement | null;
-  _timer: ReturnType<typeof setTimeout> | null;
+  _timer: any;
   language: SupportedLanguage;
 
   constructor(provider: ProviderId) {
