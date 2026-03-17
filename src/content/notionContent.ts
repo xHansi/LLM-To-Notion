@@ -1,13 +1,11 @@
-// @ts-nocheck
-
-import { collectEquationRanges, deleteRangeSafely } from "../core/equations";
+import { collectEquationRanges, deleteRangeSafely, type EquationTarget } from "../core/equations";
 
 export function initNotionContent(): void {
-  let equationTargets = [];
+  let equationTargets: EquationTarget[] = [];
   let equationIndex = 0;
-  let currentEditableRoot = null;
+  let currentEditableRoot: HTMLElement | null = null;
 
-  const getCurrentEditableRoot = () => {
+  const getCurrentEditableRoot = (): HTMLElement | null => {
     let el = document.activeElement;
     while (el && !el.isContentEditable) {
       el = el.parentElement;
@@ -15,9 +13,10 @@ export function initNotionContent(): void {
     return el || null;
   };
 
-  const collectRangesForRoot = (root) => collectEquationRanges(root);
+  const collectRangesForRoot = (root: HTMLElement | Node): EquationTarget[] =>
+    collectEquationRanges(root);
 
-  const pickEquationIndexNearCaret = () => {
+  const pickEquationIndexNearCaret = (): number => {
     if (!equationTargets.length) return 0;
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0) return 0;
@@ -41,7 +40,7 @@ export function initNotionContent(): void {
     return equationTargets.length - 1;
   };
 
-  const highlightCurrentEquation = () => {
+  const highlightCurrentEquation = (): void => {
     if (!equationTargets.length) return;
     if (equationIndex < 0 || equationIndex >= equationTargets.length) return;
     const sel = window.getSelection();
@@ -50,7 +49,7 @@ export function initNotionContent(): void {
     sel.addRange(equationTargets[equationIndex].inner);
   };
 
-  const highlightNextEquation = () => {
+  const highlightNextEquation = (): void => {
     if (!equationTargets.length) return;
 
     // Move to next equation (cyclic)
@@ -62,7 +61,7 @@ export function initNotionContent(): void {
     highlightCurrentEquation();
   };
 
-  const deleteDelimitersAndAdvance = () => {
+  const deleteDelimitersAndAdvance = (): void => {
     if (!equationTargets.length) {
       const root = getCurrentEditableRoot();
       if (!root) return;
@@ -125,7 +124,7 @@ export function initNotionContent(): void {
     }, 50);
   });
 
-  document.addEventListener("keydown", (e) => {
+  document.addEventListener("keydown", (e: KeyboardEvent) => {
     if (e.key === "F2") {
       e.preventDefault();
       // F2: highlight equation near caret, then walk forward with subsequent presses.

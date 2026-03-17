@@ -369,8 +369,7 @@ const PopupApp: React.FC = () => {
           <div className="modal-dialog">
             <h3 className="modal-title">{t("deleteTitle", language)}</h3>
             <p className="modal-text">
-              {t("deleteMessage", language).replace("{domain}", "")}
-              <span className="modal-domain">{pendingDomain.domain}</span>
+              {t("deleteMessage", language).replace("{domain}", pendingDomain.domain)}
             </p>
             <div className="modal-actions">
               <button
